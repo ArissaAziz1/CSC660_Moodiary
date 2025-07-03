@@ -1,3 +1,4 @@
+// lib/pages/signup_page.dart
 import 'package:flutter/material.dart';
 
 class SignUpScreen extends StatelessWidget {
@@ -6,130 +7,207 @@ class SignUpScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 60),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Center(
-              child: Text(
+      backgroundColor: Colors.transparent, // Make scaffold transparent to show body's background
+      appBar: AppBar(
+        backgroundColor: Colors.transparent, // Transparent app bar to show gradient
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white), // White back icon for contrast
+          onPressed: () {
+            Navigator.pop(context); // Go back to welcome screen
+          },
+        ),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFF89CFF0), // Light Blue
+              Color(0xFFADD8E6), // Lighter Blue
+              Color(0xFFE0FFFF), // Light Cyan
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SingleChildScrollView( // Use SingleChildScrollView for scrollability
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 20), // Add some space from the top
+              Text(
                 "Create Account",
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'Poppins',
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // E-mail field
-            _buildInputField(Icons.email, "E-mail"),
-
-            const SizedBox(height: 16),
-
-            // Username field
-            _buildInputField(Icons.person, "Username"),
-
-            const SizedBox(height: 16),
-
-            // Password field
-            _buildInputField(Icons.lock, "Password", obscure: true),
-
-            const SizedBox(height: 16),
-
-            // Confirm Password
-            _buildInputField(Icons.lock, "Confirm password", obscure: true),
-
-            const SizedBox(height: 32),
-
-            // Sign Up Button
-            Center(
-              child: ElevatedButton(
-                onPressed: () {
-                  // Handle sign up
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.greenAccent,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: const Text(
-                  "Sign Up",
-                  style: TextStyle(fontSize: 18),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            // Social Login
-            Row(
-              children: const [
-                Expanded(child: Divider()),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text("or"),
-                ),
-                Expanded(child: Divider()),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.facebook, size: 32),
-                SizedBox(width: 24),
-                Icon(Icons.apple, size: 32),
-                SizedBox(width: 24),
-                Icon(Icons.g_mobiledata, size: 32),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            Center(
-              child: RichText(
-                text: TextSpan(
-                  text: "Already have an account? ",
-                  style: const TextStyle(color: Colors.black87),
-                  children: [
-                    TextSpan(
-                      text: "Sign in",
-                      style: const TextStyle(
-                        color: Colors.blue,
-                        decoration: TextDecoration.underline,
-                      ),
-                      // Add navigation logic
+                  color: Colors.white, // White text for contrast
+                  shadows: [
+                    Shadow(
+                      blurRadius: 5.0,
+                      color: Colors.black.withOpacity(0.3),
+                      offset: const Offset(2.0, 2.0),
                     ),
                   ],
                 ),
               ),
-            )
-          ],
-        ),
-      ),
-    );
-  }
+              const SizedBox(height: 32),
 
-  Widget _buildInputField(IconData icon, String hint, {bool obscure = false}) {
-    return TextField(
-      obscureText: obscure,
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: Colors.black54),
-        hintText: hint,
-        filled: true,
-        fillColor: Colors.grey[200],
-        contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(30),
-          borderSide: BorderSide.none,
+              // Email field
+              TextField(
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.email, color: Colors.grey),
+                  hintText: "E-mail",
+                  hintStyle: TextStyle(color: Colors.grey[600]), // Darker hint text
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.9), // Slightly transparent white
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withOpacity(0.5), width: 1), // Soft white border
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.blue, width: 2), // Blue border on focus
+                  ),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                style: const TextStyle(color: Colors.black87), // Ensure input text is readable
+              ),
+
+              const SizedBox(height: 16),
+
+              // Username field
+              TextField(
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.person, color: Colors.grey),
+                  hintText: "Username",
+                  hintStyle: TextStyle(color: Colors.grey[600]),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.9),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withOpacity(0.5), width: 1),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.blue, width: 2),
+                  ),
+                ),
+                style: const TextStyle(color: Colors.black87),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Password field
+              TextField(
+                obscureText: true,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.lock, color: Colors.grey),
+                  hintText: "Password",
+                  hintStyle: TextStyle(color: Colors.grey[600]),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.9),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withOpacity(0.5), width: 1),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.blue, width: 2),
+                  ),
+                ),
+                style: const TextStyle(color: Colors.black87),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Confirm Password field
+              TextField(
+                obscureText: true,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.lock, color: Colors.grey),
+                  hintText: "Confirm password",
+                  hintStyle: TextStyle(color: Colors.grey[600]),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.9),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withOpacity(0.5), width: 1),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.blue, width: 2),
+                  ),
+                ),
+                style: const TextStyle(color: Colors.black87),
+              ),
+
+              const SizedBox(height: 32),
+
+              // Sign Up button (Primary Action)
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: () {
+                    // Navigate to home page after sign-up
+                    Navigator.pushReplacementNamed(context, '/home');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white, // White background
+                    foregroundColor: Colors.blue.shade700, // Darker blue text
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12), // Consistent rounded corners
+                    ),
+                    elevation: 8, // More prominent shadow
+                    shadowColor: Colors.black.withOpacity(0.2),
+                  ),
+                  child: const Text("Sign Up", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    "Already have an account?",
+                    style: TextStyle(color: Colors.white70), // White text for contrast
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pushReplacementNamed(context, '/signin'); // Navigate to sign in
+                    },
+                    child: Text(
+                      "Sign In",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white, // White text for contrast
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
