@@ -223,7 +223,7 @@ class _HomePageState extends State<HomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Hello Sarah!", // TODO: Fetch real user name
+                    "Hello Arissa!", // TODO: Fetch real user name
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,

@@ -66,7 +66,7 @@ class WelcomeScreen extends StatelessWidget {
 
                 // Subtitle Text
                 Text(
-                  'Your personal space to save every moment and track your emotions.',
+                  'save every moment',
                   style: TextStyle(
                     fontSize: screenSize.width * 0.04,
                     color: Colors.white70, // Slightly transparent white
