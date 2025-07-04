@@ -1,9 +1,12 @@
 // lib/pages/home_page.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // Import provider
-import '../widgets/bottom_navbar.dart'; // Import the bottom navigation bar
-import 'package:intl/intl.dart'; // For date formatting
-import '../theme/theme_notifier.dart'; // Import your ThemeNotifier
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart'; // Ensure this import is present for DateFormat
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../widgets/bottom_navbar.dart';
+import '../theme/theme_notifier.dart';
+import '../services/supabase_client.dart';
 
 // Enum to represent sorting options for entries
 enum SortOrder { latest, oldest }
@@ -17,42 +20,155 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   SortOrder _selectedSortOrder = SortOrder.latest; // Default to latest
+  List<Map<String, dynamic>> _entries = []; // List to store fetched entries
+  bool _isLoadingEntries = true; // Loading state for entries
 
-  // Placeholder data for recent entries
-  // In a real app, this would come from your diary entries database
-  final List<Map<String, dynamic>> _recentEntries = List.generate(
-    7, // Example number of entries
-    (index) {
-      return {
-        'id': index,
-        'title': 'Entry Title ${index + 1}',
-        'content': 'This is a short preview of the diary entry. It can contain a few lines of text...',
-        'timestamp': DateTime.now().subtract(Duration(days: index * 2)), // Dummy time for sorting
-        'mood': index % 3 == 0 ? '😊' : (index % 3 == 1 ? '😔' : '😄'), // Dummy moods
-        'imageUrl': 'https://placehold.co/600x400/ADD8E6/000000?text=Entry+Pic+${index + 1}', // Dummy image URL
-      };
-    },
-  );
+  @override
+  void initState() {
+    super.initState();
+    _fetchEntries(); // Fetch entries when the page initializes
+    // Listen for auth changes to re-fetch entries if user logs in/out
+    supabase.auth.onAuthStateChange.listen((data) {
+      if (mounted) { // Ensure widget is still mounted before calling setState
+        if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.signedOut) {
+          _fetchEntries();
+        }
+      }
+    });
+  }
+
+  Future<void> _fetchEntries() async {
+    setState(() {
+      _isLoadingEntries = true;
+    });
+
+    final User? user = supabase.auth.currentUser;
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _entries = []; // Clear entries if no user is logged in
+          _isLoadingEntries = false;
+        });
+      }
+      return;
+    }
+
+    try {
+      // Fetch entries from 'diary_entries' table for the current user
+      final List<Map<String, dynamic>> data = await supabase
+          .from('diary_entries')
+          .select()
+          .eq('user_id', user.id) // Filter by current user's ID
+          .order('created_at', ascending: _selectedSortOrder == SortOrder.oldest); // Apply initial sort
+
+      if (mounted) { // Check mounted before setState
+        setState(() {
+          _entries = data;
+        });
+      }
+    } on PostgrestException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error fetching entries: ${e.message}')),
+        );
+      }
+      _entries = []; // Clear entries on error
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('An unexpected error occurred: $e')),
+        );
+      }
+      _entries = []; // Clear entries on error
+    } finally {
+      if (mounted) { // Check mounted before setState
+        setState(() {
+          _isLoadingEntries = false;
+        });
+      }
+    }
+  }
 
   // Method to sort the entries based on the selected option
   List<Map<String, dynamic>> _sortEntries(List<Map<String, dynamic>> entries) {
+    // This method is now less critical as sorting is done by Supabase query,
+    // but kept for consistency if client-side sorting is ever needed.
     entries.sort((a, b) {
+      final DateTime timestampA = DateTime.parse(a['created_at']);
+      final DateTime timestampB = DateTime.parse(b['created_at']);
       if (_selectedSortOrder == SortOrder.latest) {
-        return b['timestamp'].compareTo(a['timestamp']); // Newest first
+        return timestampB.compareTo(timestampA); // Newest first
       } else {
-        return a['timestamp'].compareTo(b['timestamp']); // Oldest first
+        return timestampA.compareTo(timestampB); // Oldest first
       }
     });
     return entries;
   }
 
+  // --- START: Delete Entry Function (Makes the button functional) ---
+  Future<void> _deleteEntry(String entryId) async {
+    // Show confirmation dialog to prevent accidental deletions
+    final bool? confirmDelete = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirm Delete'),
+          content: const Text('Are you sure you want to delete this entry? This action cannot be undone.'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false), // User cancels
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true), // User confirms
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+
+    // If the user confirmed the deletion
+    if (confirmDelete == true) {
+      try {
+        // Perform the delete operation on Supabase for the given entryId
+        await supabase.from('diary_entries').delete().eq('id', entryId);
+
+        // Show a success message to the user
+        if (mounted) { // Check mounted before showing SnackBar
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Entry deleted successfully!')),
+          );
+        }
+        // Re-fetch entries to update the list on the UI
+        _fetchEntries();
+      } on PostgrestException catch (e) {
+        // Handle Supabase-specific errors
+        if (mounted) { // Check mounted before showing SnackBar
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete entry: ${e.message}')),
+          );
+        }
+      } catch (e) {
+        // Handle any other unexpected errors
+        if (mounted) { // Check mounted before showing SnackBar
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('An unexpected error occurred: $e')),
+          );
+        }
+      }
+    }
+  }
+  // --- END: Delete Entry Function ---
+
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> sortedEntries = _sortEntries(List.from(_recentEntries)); // Create a mutable copy
-    final themeNotifier = Provider.of<ThemeNotifier>(context); // Access the ThemeNotifier
+    // Sort entries for display
+    final List<Map<String, dynamic>> displayedEntries = _sortEntries(List.from(_entries));
+    final themeNotifier = Provider.of<ThemeNotifier>(context);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background, // Use theme background color
+      backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
         title: const Text('Moodiary', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
@@ -60,11 +176,11 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             icon: Icon(
               themeNotifier.themeMode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode,
-              color: Theme.of(context).colorScheme.onSurface, // Adjust icon color based on theme
+              color: Theme.of(context).colorScheme.onSurface,
             ),
             tooltip: 'Toggle Theme',
             onPressed: () {
-              themeNotifier.toggleTheme(); // Call the toggle method
+              themeNotifier.toggleTheme();
             },
           ),
           const SizedBox(width: 8),
@@ -75,16 +191,14 @@ class _HomePageState extends State<HomePage> {
             onTap: () {
               setState(() {
                 _selectedSortOrder = _selectedSortOrder == SortOrder.latest ? SortOrder.oldest : SortOrder.latest;
+                _fetchEntries(); // Re-fetch with new sort order
               });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Sorted by ${_selectedSortOrder == SortOrder.latest ? 'Latest' : 'Oldest'}')),
-              );
             },
           ),
-          const SizedBox(width: 16), // Add some spacing at the end
+          const SizedBox(width: 16),
         ],
       ),
-      body: SingleChildScrollView( // Wrap the body in SingleChildScrollView for overall scrollability
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,7 +208,7 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Theme.of(context).colorScheme.primary.withOpacity(0.7), Theme.of(context).colorScheme.primary], // Use theme primary color
+                  colors: [Theme.of(context).colorScheme.primary.withOpacity(0.7), Theme.of(context).colorScheme.primary],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -112,11 +226,11 @@ class _HomePageState extends State<HomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Hello Sarah!",
+                    "Hello Sarah!", // TODO: Fetch real user name
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onPrimary, // Text color on primary background
+                      color: Theme.of(context).colorScheme.onPrimary,
                       shadows: [
                         Shadow(
                           blurRadius: 5.0,
@@ -144,7 +258,7 @@ class _HomePageState extends State<HomePage> {
                       icon: Icon(Icons.add, color: Theme.of(context).colorScheme.primary),
                       label: Text('New Entry', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.surface, // Use theme surface color
+                        backgroundColor: Theme.of(context).colorScheme.surface,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -165,7 +279,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 10),
             SizedBox(
-              height: 160, // Adjusted height for more compact cards
+              height: 160,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
@@ -183,125 +297,139 @@ class _HomePageState extends State<HomePage> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onBackground),
             ),
             const SizedBox(height: 10),
-            Column( // Use Column directly within SingleChildScrollView
-              children: sortedEntries.map((entry) {
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  elevation: 3, // Slightly more prominent shadow
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), // More rounded corners
-                  clipBehavior: Clip.antiAlias, // Clip image to card shape
-                  color: Theme.of(context).cardColor, // Use theme card color
-                  child: InkWell( // Add InkWell for ripple effect on tap
-                    borderRadius: BorderRadius.circular(15),
-                    onTap: () {
-                      // TODO: Navigate to full entry view
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('View Entry ${entry['id'] + 1} pressed!')),
-                      );
-                    },
-                    child: Column( // Changed from Padding to Column to place image on top
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Display the image if available
-                        if (entry['imageUrl'] != null)
-                          Container(
-                            height: 180, // Fixed height for the image
-                            width: double.infinity, // Take full width
-                            decoration: BoxDecoration(
-                              image: DecorationImage(
-                                image: NetworkImage(entry['imageUrl']),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            child: Align(
-                              alignment: Alignment.bottomLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                  DateFormat('dd MMMM yyyy').format(entry['timestamp']), // Corrected format: 'dd MMMM yyyy'
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    shadows: [
-                                      Shadow(
-                                        blurRadius: 3.0,
-                                        color: Colors.black,
-                                        offset: Offset(1.0, 1.0),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        Padding( // Wrap the rest of the content in Padding
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded( // Ensure title doesn't overflow
-                                    child: Text(
-                                      entry['title'],
-                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.titleLarge?.color),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  // Removed date here as it's now on the image
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Text(
-                                    entry['mood'], // Display mood emoji
-                                    style: const TextStyle(fontSize: 20),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      entry['content'],
-                                      style: TextStyle(fontSize: 14, color: Theme.of(context).textTheme.bodyMedium?.color),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Align(
-                                alignment: Alignment.bottomRight,
-                                child: TextButton(
-                                  onPressed: () {
-                                    // TODO: Navigate to full entry view
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Read More for Entry ${entry['id'] + 1}')),
-                                    );
-                                  },
-                                  child: const Text('Read More', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-                                ),
-                              ),
-                            ],
-                          ),
+            _isLoadingEntries
+                ? const Center(child: CircularProgressIndicator())
+                : displayedEntries.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No entries found. Start by adding a new one!',
+                          style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onBackground.withOpacity(0.7)),
+                          textAlign: TextAlign.center,
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
+                      )
+                    : Column(
+                        children: displayedEntries.map((entry) {
+                          final DateTime entryTimestamp = DateTime.parse(entry['created_at']);
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 8),
+                            elevation: 3,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                            clipBehavior: Clip.antiAlias,
+                            color: Theme.of(context).cardColor,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(15),
+                              onTap: () {
+                                // TODO: Implement navigation to a detailed entry view page
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('View Entry ${entry['title']} pressed!')),
+                                );
+                              },
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (entry['image_url'] != null)
+                                    Container(
+                                      height: 180,
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
+                                        image: DecorationImage(
+                                          image: NetworkImage(entry['image_url']),
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.bottomLeft,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Text(
+                                            DateFormat('dd MMMMyyyy').format(entryTimestamp), // Corrected date format
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              shadows: [
+                                                Shadow(
+                                                  blurRadius: 3.0,
+                                                  color: Colors.black,
+                                                  offset: Offset(1.0, 1.0),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                entry['title'] ?? 'No Title',
+                                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).textTheme.titleLarge?.color),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            // --- Delete Button (calls _deleteEntry function) ---
+                                            IconButton(
+                                              icon: Icon(Icons.delete, color: Colors.red.shade400),
+                                              onPressed: () => _deleteEntry(entry['id']), // This is what makes it functional!
+                                              tooltip: 'Delete Entry',
+                                            ),
+                                            // --- End Delete Button ---
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              entry['mood_emoji'] ?? '📝',
+                                              style: const TextStyle(fontSize: 20),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                entry['content'] ?? 'No content preview available.',
+                                                style: TextStyle(fontSize: 14, color: Theme.of(context).textTheme.bodyMedium?.color),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Align(
+                                          alignment: Alignment.bottomRight,
+                                          child: TextButton(
+                                            onPressed: () {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('Read More for Entry ${entry['title']}')),
+                                              );
+                                            },
+                                            child: const Text('Read More', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
           ],
         ),
       ),
-      // Use the custom BottomNavBar
       bottomNavigationBar: const BottomNavBar(currentIndex: 0),
     );
   }
 
-  // Helper method to build a cute sort button (similar to GalleryScreen)
+  // Helper methods (unchanged from previous versions)
   Widget _buildSortButton(
     BuildContext context, {
     required String label,
@@ -322,19 +450,19 @@ class _HomePageState extends State<HomePage> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.circular(20), // More rounded for a "cute" look
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: borderSide.color,
             width: borderSide.width,
           ),
           boxShadow: [
-            if (isLatest) // Apply shadow only if 'Latest' is selected
+            if (isLatest)
               BoxShadow(
                 color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
-            if (!isLatest) // Apply a subtle shadow if not selected
+            if (!isLatest)
               BoxShadow(
                 color: Theme.of(context).colorScheme.shadow.withOpacity(0.1),
                 blurRadius: 2,
@@ -355,7 +483,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(width: 4),
             Icon(
-              isLatest ? Icons.arrow_downward : Icons.arrow_upward, // Down for latest, Up for oldest
+              isLatest ? Icons.arrow_downward : Icons.arrow_upward,
               size: 18,
               color: iconColor,
             ),
@@ -365,11 +493,10 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Helper method to build a mood summary card
   Widget _buildMoodSummaryCard(
       BuildContext context, String title, String moodText, String emoji, Color bgColor, Color textColor) {
     return Container(
-      width: 150, // Fixed width for each card
+      width: 150,
       margin: const EdgeInsets.only(right: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -398,7 +525,7 @@ class _HomePageState extends State<HomePage> {
           ),
           Text(
             emoji,
-            style: const TextStyle(fontSize: 40), // Large emoji
+            style: const TextStyle(fontSize: 40),
           ),
           Text(
             moodText,

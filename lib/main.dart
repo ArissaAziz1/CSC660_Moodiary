@@ -1,22 +1,48 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // <--- ADD THIS IMPORT
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert'; // <--- ADD THIS IMPORT for json.decode
+
 import 'pages/welcome_page.dart';
 import 'pages/signin_page.dart';
 import 'pages/signup_page.dart';
-import 'pages/home_page.dart';
+import 'pages/home_page.dart' as home_page;
 import 'pages/calendar_page.dart';
-import 'pages/entry_editor_page.dart';
+import 'pages/entry_editor_page.dart'; // Make sure WriteEntryScreen is defined in this file
 import 'pages/profile_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/account_page.dart';
 import 'pages/notifications_page.dart';
 import 'pages/gallery_page.dart';
-import 'theme/theme_notifier.dart'; // <--- ADD THIS IMPORT
+import 'theme/theme_notifier.dart';
+// ignore: unused_import
+import 'services/supabase_client.dart'; // Import your Supabase client instance
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // Required for Supabase initialization
+
+  // Initialize Supabase using the global __supabase_config
+  // This configuration is provided by the Canvas environment.
+  // Correctly parse the JSON string from __supabase_config
+  final Map<String, dynamic> supabaseConfig =
+      (const String.fromEnvironment('SUPABASE_CONFIG_JSON').isNotEmpty)
+          ? json.decode(const String.fromEnvironment('SUPABASE_CONFIG_JSON')) as Map<String, dynamic>
+          : {
+              // Fallback for local development if not running in Canvas
+              'url': 'https://eadhjhupwlbpteygfzoi.supabase.co', // REPLACE WITH YOUR ACTUAL SUPABASE URL
+              'anonKey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhZGhqaHVwd2xicHRleWdmem9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE1NzUyNjYsImV4cCI6MjA2NzE1MTI2Nn0.F9_rpqBT2rxQET59Gxlx5lbAI48HRHnr7g2BVySqPds', // REPLACE WITH YOUR ACTUAL SUPABASE ANON KEY
+            };
+
+
+  await Supabase.initialize(
+    url: supabaseConfig['url']!,
+    anonKey: supabaseConfig['anonKey']!,
+    debug: true, // Set to false in production
+  );
+
   runApp(
-    ChangeNotifierProvider( // <--- WRAP YOUR APP WITH THIS
-      create: (context) => ThemeNotifier(), // <--- CREATE AN INSTANCE OF YOUR THEME NOTIFIER
+    ChangeNotifierProvider(
+      create: (context) => ThemeNotifier(),
       child: const MoodiaryApp(),
     ),
   );
@@ -27,15 +53,14 @@ class MoodiaryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // <--- ACCESS THE THEMENOTIFIER HERE
     final themeNotifier = Provider.of<ThemeNotifier>(context);
 
     return MaterialApp(
       title: 'Moodiary',
-      themeMode: themeNotifier.themeMode, // <--- USE THE THEME MODE FROM THE NOTIFIER
-      theme: ThemeData( // Your existing LIGHT theme definition
+      themeMode: themeNotifier.themeMode,
+      theme: ThemeData(
         fontFamily: 'Poppins',
-        primarySwatch: Colors.blue, // Material 2 concept, consider colorScheme for M3
+        primarySwatch: Colors.blue,
         scaffoldBackgroundColor: Colors.grey[100],
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
@@ -48,37 +73,35 @@ class MoodiaryApp extends StatelessWidget {
           secondary: Colors.greenAccent,
           surface: Colors.grey[100]!,
           background: Colors.grey[100]!,
-          brightness: Brightness.light, // Explicitly define brightness for light theme
+          brightness: Brightness.light,
         ),
         useMaterial3: true,
       ),
-      darkTheme: ThemeData( // <--- DEFINE YOUR DARK THEME HERE
+      darkTheme: ThemeData(
         fontFamily: 'Poppins',
-        primarySwatch: Colors.blue, // Material 2 concept
-        scaffoldBackgroundColor: Colors.grey[900], // Dark background
+        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: Colors.grey[900],
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          foregroundColor: Colors.white, // White icons/text for dark mode app bar
+          foregroundColor: Colors.white,
         ),
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue,
-          primary: Colors.blue.shade300, // Lighter blue for dark mode primary
+          primary: Colors.blue.shade300,
           secondary: Colors.greenAccent,
-          surface: Colors.grey[800]!, // Darker surface for cards/sheets
+          surface: Colors.grey[800]!,
           background: Colors.grey[900]!,
-          brightness: Brightness.dark, // Explicitly define brightness for dark theme
+          brightness: Brightness.dark,
         ),
-        // You might want to adjust other colors like text, card, etc. for dark mode
-        cardColor: Colors.grey[850], // Darker card background
-        textTheme: const TextTheme( // Define text colors for dark mode
+        cardColor: Colors.grey[850],
+        textTheme: const TextTheme(
           bodyLarge: TextStyle(color: Colors.white),
           bodyMedium: TextStyle(color: Colors.white70),
           titleLarge: TextStyle(color: Colors.white),
           titleMedium: TextStyle(color: Colors.white),
-          // Add more text styles if needed, e.g., displayLarge, headlineMedium, etc.
         ),
-        iconTheme: const IconThemeData(color: Colors.white), // Default icon color for dark mode
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       debugShowCheckedModeBanner: false,
       initialRoute: '/welcome',
@@ -86,7 +109,7 @@ class MoodiaryApp extends StatelessWidget {
         '/welcome': (context) => const WelcomeScreen(),
         '/signin': (context) => const SignInScreen(),
         '/signup': (context) => const SignUpScreen(),
-        '/home': (context) => const HomePage(),
+        '/home': (context) => const home_page.HomePage(),
         '/calendar': (context) => const CalendarScreen(),
         '/entry': (context) => WriteEntryScreen(),
         '/profile': (context) => const ProfilePage(),

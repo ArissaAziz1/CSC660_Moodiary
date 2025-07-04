@@ -1,6 +1,13 @@
 // lib/pages/entry_editor_page.dart
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-// No need to import bottom_navbar here as it's not directly used in this page's scaffold
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/supabase_client.dart';
 
 class WriteEntryScreen extends StatefulWidget {
   const WriteEntryScreen({super.key});
@@ -12,7 +19,9 @@ class WriteEntryScreen extends StatefulWidget {
 class _WriteEntryScreenState extends State<WriteEntryScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
-  String? _selectedEmoji; // State variable to hold the selected emoji
+  String? _selectedEmoji;
+  File? _selectedImage;
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -21,86 +30,35 @@ class _WriteEntryScreenState extends State<WriteEntryScreen> {
     super.dispose();
   }
 
-  // Method to show the emoji picker bottom sheet
+  // Show Emoji Picker
   void _showEmojiPicker() {
     final List<String> emojis = [
-      '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃',
-      '😉', '😊', '😇', '🥰', '🤩', '😘', '😗', '😚', '😙', '😋',
-      '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐',
-      '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌',
-      '😔', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵',
-      '🥶', '😵', '🤯', '🤠', '🥳', '😎', '🤓', '🧐', '😕', '😟',
-      '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨',
-      '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😩', '😫', '😤',
+      '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊',
+      '🥰','🤩','😘','😗','😚','😙','😋','😛','😜','🤪','😝',
+      '🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶'
     ];
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Allows the sheet to take more height if needed
-      builder: (BuildContext context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.5, // Start at half screen height
-          minChildSize: 0.3,
-          maxChildSize: 0.9, // Can expand up to 90% of screen height
-          expand: false,
-          builder: (BuildContext context, ScrollController scrollController) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).canvasColor,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Choose Mood/Emoji',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: GridView.builder(
-                      controller: scrollController,
-                      padding: const EdgeInsets.all(8.0),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 7, // Number of emojis per row
-                        crossAxisSpacing: 4.0,
-                        mainAxisSpacing: 4.0,
-                      ),
-                      itemCount: emojis.length,
-                      itemBuilder: (context, index) {
-                        final emoji = emojis[index];
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedEmoji = emoji; // Set the selected emoji
-                            });
-                            Navigator.pop(context); // Close the bottom sheet
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Selected: $emoji')),
-                            );
-                          },
-                          child: Center(
-                            child: Text(
-                              emoji,
-                              style: const TextStyle(fontSize: 30), // Larger emoji size
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
+      builder: (context) {
+        return GridView.builder(
+          padding: const EdgeInsets.all(12),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 6,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: emojis.length,
+          itemBuilder: (context, index) {
+            final emoji = emojis[index];
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedEmoji = emoji;
+                });
+                Navigator.pop(context);
+              },
+              child: Center(child: Text(emoji, style: const TextStyle(fontSize: 28))),
             );
           },
         );
@@ -108,133 +66,156 @@ class _WriteEntryScreenState extends State<WriteEntryScreen> {
     );
   }
 
+  // Pick Image
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      setState(() {
+        _selectedImage = File(image.path);
+      });
+    }
+  }
+
+  // Save Entry
+  Future<void> _saveEntry() async {
+    setState(() {
+      _isSaving = true;
+    });
+
+    final user = supabase.auth.currentUser;
+    if (user == null) {
+      _showMessage('You must be logged in.');
+      setState(() {
+        _isSaving = false;
+      });
+      return;
+    }
+
+    String? imageUrl;
+    if (_selectedImage != null) {
+      try {
+        final fileName = '${user.id}/${DateTime.now().millisecondsSinceEpoch}${p.extension(_selectedImage!.path)}';
+        await supabase.storage
+            .from('moodiary')
+            .upload(fileName, _selectedImage!, fileOptions: const FileOptions(upsert: true));
+
+        imageUrl = supabase.storage.from('moodiary').getPublicUrl(fileName);
+      } catch (e) {
+        _showMessage('Image upload failed: $e');
+        setState(() {
+          _isSaving = false;
+        });
+        return;
+      }
+    }
+
+    final now = DateTime.now();
+
+    try {
+      await supabase.from('diary_entries').insert({
+        'user_id': user.id,
+        'title': _titleController.text.trim(),
+        'content': _contentController.text.trim(),
+        'mood_emoji': _selectedEmoji,
+        'image_url': imageUrl,
+        'created_at': now.toIso8601String(), // Save timestamp
+      });
+
+      _showMessage('Entry saved successfully!');
+      Navigator.pop(context);
+    } catch (e) {
+      _showMessage('Error saving entry: $e');
+    } finally {
+      setState(() {
+        _isSaving = false;
+      });
+    }
+  }
+
+  void _showMessage(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final date = DateTime.now();
+    final dateLabel = DateFormat('EEEE, MMMM d, yyyy').format(date);
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            Navigator.pop(context); // Go back to the previous screen
-          },
-        ),
+        title: const Text('New Diary Entry'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.undo, color: Colors.black54),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Undo pressed!')),
-              );
-            },
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.redo, color: Colors.black54),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Redo pressed!')),
-              );
-            },
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.check, color: Colors.blue),
-            onPressed: () {
-              // TODO: Implement save functionality with _titleController.text, _contentController.text, _selectedEmoji
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Entry saved! Title: "${_titleController.text}", Emoji: ${_selectedEmoji ?? "None"}',
+          _isSaving
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Center(
+                    child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                   ),
-                ),
-              );
-              // Optionally pop back after saving
-              // Navigator.pop(context);
-            },
-          ),
-          const SizedBox(width: 16),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.check),
+                  onPressed: _saveEntry,
+                )
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Date and Mood
+            // Date
             Row(
               children: [
-                const Text("15", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 12),
-                const Text("March 2025", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Icon(Icons.calendar_today, size: 20, color: Theme.of(context).colorScheme.onSurface),
                 const SizedBox(width: 8),
-                if (_selectedEmoji != null) // Display selected emoji if available
-                  Text(
-                    _selectedEmoji!,
-                    style: const TextStyle(fontSize: 24),
-                  )
-                else
-                  const Icon(Icons.mood, color: Colors.grey, size: 24), // Default mood icon
+                Text(dateLabel, style: Theme.of(context).textTheme.bodyMedium),
+                const Spacer(),
+                _selectedEmoji != null
+                    ? Text(_selectedEmoji!, style: const TextStyle(fontSize: 28))
+                    : IconButton(
+                        icon: const Icon(Icons.emoji_emotions_outlined),
+                        onPressed: _showEmojiPicker,
+                      )
               ],
             ),
-            const SizedBox(height: 8),
-            const Text("Tuesday", style: TextStyle(fontSize: 16, color: Colors.grey)),
-
             const SizedBox(height: 20),
+            // Title
             TextField(
-              controller: _titleController, // Assign controller
+              controller: _titleController,
               decoration: const InputDecoration(
-                hintText: 'Title',
-                border: InputBorder.none,
-                hintStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                labelText: 'Title',
+                border: OutlineInputBorder(),
               ),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
-              maxLines: 1,
             ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: TextField(
-                controller: _contentController, // Assign controller
-                decoration: const InputDecoration(
-                  hintText: 'Write more...',
-                  border: InputBorder.none,
-                  hintStyle: TextStyle(color: Colors.grey),
-                ),
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-                style: const TextStyle(fontSize: 16, color: Colors.black87),
+            const SizedBox(height: 16),
+            // Content
+            TextField(
+              controller: _contentController,
+              decoration: const InputDecoration(
+                labelText: 'Write your thoughts...',
+                border: OutlineInputBorder(),
               ),
+              maxLines: 8,
+            ),
+            const SizedBox(height: 16),
+            // Image Preview
+            if (_selectedImage != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(_selectedImage!, height: 180, width: double.infinity, fit: BoxFit.cover),
+              ),
+            const SizedBox(height: 16),
+            // Add Image Button
+            OutlinedButton.icon(
+              onPressed: _pickImage,
+              icon: const Icon(Icons.image),
+              label: const Text('Add Image'),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: Container(
-        color: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildToolbarIcon(Icons.edit, 'Edit', () { /* TODO: Implement edit functionality */ }),
-            _buildToolbarIcon(Icons.text_fields, 'Text', () { /* TODO: Implement text formatting */ }),
-            _buildToolbarIcon(Icons.format_align_left, 'Align', () { /* TODO: Implement alignment */ }),
-            _buildToolbarIcon(Icons.image, 'Image', () { /* TODO: Implement image attachment */ }),
-            _buildToolbarIcon(Icons.label, 'Tag', () { /* TODO: Implement tagging */ }),
-            _buildToolbarIcon(Icons.mic, 'Voice', () { /* TODO: Implement voice recording */ }),
-            _buildToolbarIcon(Icons.emoji_emotions, 'Emoji', _showEmojiPicker), // Connect to emoji picker
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Helper method to build toolbar icons
-  Widget _buildToolbarIcon(IconData icon, String tooltip, VoidCallback onPressed) {
-    return IconButton(
-      icon: Icon(icon, color: Colors.black54),
-      tooltip: tooltip,
-      onPressed: onPressed, // Use the provided onPressed callback
     );
   }
 }
