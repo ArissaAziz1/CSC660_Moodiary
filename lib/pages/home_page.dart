@@ -91,8 +91,6 @@ class _HomePageState extends State<HomePage> {
 
   // Method to sort the entries based on the selected option
   List<Map<String, dynamic>> _sortEntries(List<Map<String, dynamic>> entries) {
-    // This method is now less critical as sorting is done by Supabase query,
-    // but kept for consistency if client-side sorting is ever needed.
     entries.sort((a, b) {
       final DateTime timestampA = DateTime.parse(a['created_at']);
       final DateTime timestampB = DateTime.parse(b['created_at']);
@@ -105,7 +103,7 @@ class _HomePageState extends State<HomePage> {
     return entries;
   }
 
-  // --- START: Delete Entry Function (Makes the button functional) ---
+  // Delete Entry Function
   Future<void> _deleteEntry(String entryId) async {
     // Show confirmation dialog to prevent accidental deletions
     final bool? confirmDelete = await showDialog<bool>(
@@ -159,7 +157,6 @@ class _HomePageState extends State<HomePage> {
       }
     }
   }
-  // --- END: Delete Entry Function ---
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +250,8 @@ class _HomePageState extends State<HomePage> {
                     alignment: Alignment.centerRight,
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        Navigator.pushNamed(context, '/entry'); // Navigate to entry editor
+                        // Navigate to entry editor for creating a NEW entry
+                        Navigator.pushNamed(context, '/entry');
                       },
                       icon: Icon(Icons.add, color: Theme.of(context).colorScheme.primary),
                       label: Text('New Entry', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
@@ -319,7 +317,7 @@ class _HomePageState extends State<HomePage> {
                             child: InkWell(
                               borderRadius: BorderRadius.circular(15),
                               onTap: () {
-                                // TODO: Implement navigation to a detailed entry view page
+                                // TODO: Implement navigation to a detailed entry view page if needed
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text('View Entry ${entry['title']} pressed!')),
                                 );
@@ -374,13 +372,26 @@ class _HomePageState extends State<HomePage> {
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                            // --- Delete Button (calls _deleteEntry function) ---
+                                            // --- Edit and Delete Buttons ---
+                                            IconButton(
+                                              icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.primary),
+                                              onPressed: () async {
+                                                // Navigate to entry editor for EDITING an existing entry
+                                                await Navigator.pushNamed(
+                                                  context,
+                                                  '/entry',
+                                                  arguments: entry, // Pass the entire entry map as arguments
+                                                );
+                                                _fetchEntries(); // Refresh entries after editing
+                                              },
+                                              tooltip: 'Edit Entry',
+                                            ),
                                             IconButton(
                                               icon: Icon(Icons.delete, color: Colors.red.shade400),
-                                              onPressed: () => _deleteEntry(entry['id']), // This is what makes it functional!
+                                              onPressed: () => _deleteEntry(entry['id']), // Pass the entry ID
                                               tooltip: 'Delete Entry',
                                             ),
-                                            // --- End Delete Button ---
+                                            // --- End Edit and Delete Buttons ---
                                           ],
                                         ),
                                         const SizedBox(height: 8),
